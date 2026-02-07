@@ -1,5 +1,16 @@
 # Microinvest Invoice Pro Import/Export
 
+## Защо е създаден инструментът
+
+Нуждата от този инструмент идва от преминаването към евро, при което трябва масово да се актуализират много цени. През стандартния интерфейс на Microinvest Invoice Pro това е бавно и неудобно за големи обеми промени.
+
+## Как работи
+
+- Инструментът се стартира на машината, където е базата данни на Invoice Pro (обичайно MS SQL Express 2017).
+- Може да експортира таблица `Items` (Номенклатура на стоки) в Excel и след това да импортира обратно актуализирани данни.
+- При импорт съществуващите използвани номенклатури първо се маркират като невидими `Invisible = True`, след което се зареждат новите записи.
+- По този начин съществуващите документи не се засягат и продължават да използват старите наименования и цени.
+
 ## Project structure
 
 ```text
@@ -9,9 +20,7 @@ Microinvest-Invoice-Pro-import-export/
 |- importer/
 |  |- .env.example
 |  |- main.py
-|  |- setup.bat
 |  |- app_config.json (created/updated after run)
-|  |- venv/ (optional, if local setup script is used)
 |- docs/
 ```
 
@@ -88,5 +97,6 @@ If `pyenv` is not recognized, close and reopen the terminal.
 ## Notes
 
 - The application entry point is `importer/main.py`.
+- Rename `importer/.env.example` to `importer/.env` and adjust values if needed.
 - Configuration is loaded from `importer/.env` if that file exists.
 - SQL Server access requires `ODBC Driver 17 for SQL Server` to be installed.
