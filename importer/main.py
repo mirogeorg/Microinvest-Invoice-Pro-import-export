@@ -126,14 +126,15 @@ class ExcelSQLManager:
                 else:
                     print("Моля въведете валиден номер или име от списъка!")
     
-    def check_table_exists(self, conn):
+    def check_table_exists(self, conn, table_name=None):
         """Проверява дали таблицата съществува в текущата база"""
         try:
+            table_to_check = table_name or CONFIG['table_name']
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES 
                 WHERE TABLE_NAME = ? AND TABLE_TYPE = 'BASE TABLE'
-            """, (CONFIG['table_name'],))
+            """, (table_to_check,))
             exists = cursor.fetchone()[0] > 0
             cursor.close()
             return exists
@@ -390,6 +391,33 @@ class ExcelSQLManager:
             query_vatterms = """SELECT [VatTermID] as 'ДДС Срок ID', [Description] as 'Описание',
                 [TypeIdentifier] as 'Тип', [VatValue] as 'Стойност'
                 FROM [dbo].[VatTerms] ORDER BY [VatTermID]"""
+
+            query_partners = """
+            SELECT
+                [PartnerID] as 'PartnerID',
+                [Name] as 'Име',
+                [NameEnglish] as 'Име (EN)',
+                [ContactName] as 'Лице за контакт',
+                [ContactNameEnglish] as 'Лице за контакт (EN)',
+                [EMail] as 'EMail',
+                [Bulstat] as 'Булстат',
+                [VatId] as 'ДДС Номер',
+                [BankName] as 'Банка',
+                [BankCode] as 'Банков код',
+                [BankAccount] as 'Банкова сметка',
+                [Priority] as 'Priority',
+                [GroupID] as 'GroupID',
+                [Visible] as 'Visible',
+                [MainPartnerID] as 'MainPartnerID',
+                [StatusID] as 'StatusID',
+                [IsExported] as 'IsExported',
+                [IsOSSPartner] as 'IsOSSPartner',
+                [CountryID] as 'CountryID',
+                [DocumentEndDatePeriod] as 'DocumentEndDatePeriod'
+            FROM [dbo].[Partners]
+            WHERE [Visible] = 1
+            ORDER BY [Name]
+            """
             
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
@@ -398,6 +426,12 @@ class ExcelSQLManager:
                 df_itemgroups = pd.read_sql(query_itemgroups, conn)
                 df_status = pd.read_sql(query_status, conn)
                 df_vatterms = pd.read_sql(query_vatterms, conn)
+                partners_table_exists = self.check_table_exists(conn, 'Partners')
+                df_partners = pd.DataFrame()
+                if partners_table_exists:
+                    df_partners = pd.read_sql(query_partners, conn)
+                else:
+                    self.log("⚠ Таблица 'Partners' не е намерена. Sheet 'Партньори' няма да бъде генериран.")
             
             if df_items.empty:
                 self.log("⚠ Няма данни за експортиране")
@@ -435,6 +469,12 @@ class ExcelSQLManager:
                     df_vatterms['Display'] = df_vatterms['ДДС Срок ID'].astype(str) + ' - ' + df_vatterms['Описание']
                     df_vatterms[['ДДС Срок ID', 'Display', 'Описание', 'Тип']].to_excel(writer, index=False, sheet_name='VatTerms')
                     self.add_dropdown_validation(ws_items, 'H', 'VatTerms', 'B', 2, len(df_items)+1)
+
+                if partners_table_exists:
+                    df_partners.to_excel(writer, index=False, sheet_name='Партньори')
+                    ws_partners = writer.sheets['Партньори']
+                    self.auto_adjust_column_width(ws_partners)
+                    self.format_header_bold(ws_partners)
             
             self.log(f"✓ Експортирани {len(df_items)} записа")
             if self._with_tk_dialog(lambda r: messagebox.askyesno("Успех", 
