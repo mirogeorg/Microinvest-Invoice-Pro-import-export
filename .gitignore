@@ -1,0 +1,21 @@
+# --- OS Specific Files ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Editor Specific Files ---
+.vscode/
+.idea/
+*.swp
+
+# --- Python Specific ---
+__pycache__/
+*.py[cod]
+venv/
+.env
+*.log
+
+# project-specific
+app_config.json    
+docs/krisi.xlsx
+docs/krisi_exported.xlsx

@@ -1,0 +1,34 @@
+USE [InvoicePro_26020309341273] -- Уверете се, че това е правилната база
+GO
+
+BEGIN TRANSACTION;
+
+BEGIN TRY
+    -- 1. Запазваме списък с ID-тата, които искаме да премахнем/скрием
+    -- Това са всички, които в момента са Visible = 1
+    DECLARE @Targets TABLE (ItemID INT);
+    INSERT INTO @Targets (ItemID)
+    SELECT ItemID FROM [dbo].[Items] WHERE [Visible] = 1;
+
+    -- 2. Първо правим ВСИЧКИ набелязани записи невидими (Visible = 0)
+    -- Това гарантира, че ако нещо не може да се изтрие, то ще остане скрито (Visible=False),
+    -- както поискахте.
+    UPDATE [dbo].[Items]
+    SET [Visible] = 0
+    WHERE ItemID IN (SELECT ItemID FROM @Targets);
+
+    -- 3. Опитваме се да изтрием физически само тези, които НЕ се използват в други таблици.
+    -- Проверяваме двете основни таблици от вашата схема: DocumentDetails и DocumentTemplateDetails
+    DELETE FROM [dbo].[Items]
+    WHERE ItemID IN (SELECT ItemID FROM @Targets) -- Само тези, които бяха видими преди малко
+      AND ItemID NOT IN (SELECT DISTINCT ItemID FROM [dbo].[DocumentDetails] WHERE ItemID IS NOT NULL)
+      AND ItemID NOT IN (SELECT DISTINCT ItemID FROM [dbo].[DocumentTemplateDetails] WHERE ItemID IS NOT NULL);
+
+    COMMIT TRANSACTION;
+    PRINT 'Готово: Всички видими номенклатури бяха скрити. Тези, които не се използват в документи, бяха изтрити напълно.';
+END TRY
+BEGIN CATCH
+    ROLLBACK TRANSACTION;
+    PRINT 'Възникна грешка! Промените бяха отменени.';
+    PRINT ERROR_MESSAGE();
+END CATCH
