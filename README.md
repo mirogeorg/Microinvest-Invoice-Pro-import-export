@@ -1,40 +1,92 @@
-# Krisi InvoicePro Importer
+# Microinvest Invoice Pro Import/Export
 
-## Windows setup (human-friendly)
+## Project structure
 
-These steps follow what `krisi_importer/setup.bat` does, but written as manual instructions.
+```text
+Microinvest-Invoice-Pro-import-export/
+|- README.md
+|- requirements.txt
+|- importer/
+|  |- .env.example
+|  |- main.py
+|  |- setup.bat
+|  |- app_config.json (created/updated after run)
+|  |- venv/ (optional, if local setup script is used)
+|- docs/
+```
 
-1. Open **Command Prompt** or **PowerShell** as **Administrator**.
-2. Go to the project folder:
+## Setup path 1: Simple (winget)
+
+1. Install Git (if not installed):
    ```bat
-   cd D:\Dropbox\DropMiro\PRG\python\Krisi_invoice_pro_importer\krisi_importer
+   winget install Git.Git
+   ```
+2. Clone the repository and enter it:
+   ```bat
+   git clone https://github.com/mirogeorg/Microinvest-Invoice-Pro-import-export
+   cd Microinvest-Invoice-Pro-import-export
    ```
 3. Check Python:
    ```bat
    where python
    python --version
    ```
-4. If Python is missing, install Python 3.12 with WinGet:
+4. If Python is missing, install Python 3.12:
    ```bat
    winget install --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
    winget upgrade Python.Python.3.12
    ```
-   Then close and reopen the terminal (or refresh PATH) before continuing.
-5. Create virtual environment (only once):
+5. Create and activate a virtual environment from the repository root:
    ```bat
-   python -m venv venv
+   python -m venv .venv
+   .venv\Scripts\activate.bat
    ```
-6. Activate virtual environment:
-   ```bat
-   venv\Scripts\activate.bat
-   ```
-7. Install dependencies:
+6. Install dependencies from root `requirements.txt`:
    ```bat
    pip install --upgrade pip
-   pip install -r ..\requirements.txt
+   pip install -r requirements.txt
    ```
+7. Run the app:
+   ```bat
+   python importer\main.py
+   ```
+
+## Setup path 2: Advanced (pyenv)
+
+Use this if you work with multiple Python versions and want per-project version control.
+
+1. Install required tools:
+   ```bat
+   winget install Git.Git
+   winget install pyenv-win.pyenv-win
+   ```
+2. Clone and enter the repository:
+   ```bat
+   git clone https://github.com/mirogeorg/Microinvest-Invoice-Pro-import-export
+   cd Microinvest-Invoice-Pro-import-export
+   ```
+3. Install and pin Python for this project:
+   ```bat
+   pyenv install 3.12.8
+   pyenv local 3.12.8
+   python --version
+   ```
+4. Create and activate virtual environment:
+   ```bat
+   python -m venv .venv
+   .venv\Scripts\activate.bat
+   ```
+5. Install dependencies and run:
+   ```bat
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   python importer\main.py
+   ```
+
+If `pyenv` is not recognized, close and reopen the terminal.
 
 ## Notes
 
-- `setup.bat` checks for `krisi_importer\requirements.txt`, but in this repository the file is at the root (`requirements.txt`). That is why the manual command above uses `..\requirements.txt`.
-- If `venv` already exists, you can skip step 5.
+- The application entry point is `importer/main.py`.
+- Configuration is loaded from `importer/.env` if that file exists.
+- SQL Server access requires `ODBC Driver 17 for SQL Server` to be installed.
