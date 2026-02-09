@@ -530,7 +530,7 @@ class ExcelSQLManager:
     def export_warehouse_pro_partners_to_excel(self):
         default_mdb_file = r"C:\ProgramData\Microinvest\Warehouse Pro\Microinvest.mdb"
         mdb_file = input(
-            f"Въведете път до .MDB файл на Warehouse Pro[{default_mdb_file}]: "
+            f"Въведете път до .MDB файл на Warehouse Pro [{default_mdb_file}]: "
         ).strip().strip('"')
         if not mdb_file:
             mdb_file = default_mdb_file
