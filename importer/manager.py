@@ -7,12 +7,12 @@ try:
     from .config import CONFIG
     from .db import check_odbc_driver, get_connection_string, prompt_database_selection
     from .export_service import export_items_excel, export_partners_excel, export_warehouse_partners_excel
-    from .import_service import import_items_excel
+    from .import_service import convert_warehouse_partners_excel_for_invoice_pro, import_items_excel
 except ImportError:
     from config import CONFIG
     from db import check_odbc_driver, get_connection_string, prompt_database_selection
     from export_service import export_items_excel, export_partners_excel, export_warehouse_partners_excel
-    from import_service import import_items_excel
+    from import_service import convert_warehouse_partners_excel_for_invoice_pro, import_items_excel
 
 
 def log(message):
@@ -31,8 +31,9 @@ def show_menu(config=CONFIG):
     print('2. 📤 Експорт Invoice Pro Партньори → Excel')
     print('3. 📤 Експорт Warehouse Pro партньори -> Excel')
     print('4. 📥 Импорт Excel → Invoice Pro Items')
-    print('5. 🗃️ Смяна на база данни')
-    print('6. 🚪 Изход')
+    print('5. 🔄 Конвертиране Excel (Warehouse партньори) → формат за Invoice Pro Партньори')
+    print('6. 🗃️ Смяна на база данни')
+    print('7. 🚪 Изход')
     print('=' * 60)
 
 
@@ -52,7 +53,7 @@ def run_app(config=CONFIG):
 
     while True:
         show_menu(config)
-        choice = input('Изберете (1-6): ').strip()
+        choice = input('Изберете (1-7): ').strip()
 
         if choice == '1':
             export_items_excel(log, config)
@@ -63,8 +64,10 @@ def run_app(config=CONFIG):
         elif choice == '4':
             import_items_excel(log, config)
         elif choice == '5':
-            prompt_database_selection(config, log)
+            convert_warehouse_partners_excel_for_invoice_pro(log, config)
         elif choice == '6':
+            prompt_database_selection(config, log)
+        elif choice == '7':
             log('Изход...')
             break
         else:

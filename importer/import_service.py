@@ -180,6 +180,120 @@ def import_items_excel(log, config=CONFIG):
         log(f'✗ Грешка при импорт: {e}')
 
 
+def _pick_first_existing_value(row, candidates, default=''):
+    for col in candidates:
+        if col in row and pd.notna(row[col]):
+            value = row[col]
+            if isinstance(value, str):
+                value = value.strip()
+            if value != '':
+                return value
+    return default
+
+
+def convert_warehouse_partners_excel_for_invoice_pro(log, config=CONFIG):
+    source_file = with_tk_dialog(
+        lambda r: filedialog.askopenfilename(
+            title='Изберете Excel файл от Warehouse Pro (sheet Partners)',
+            filetypes=[('Excel файлове', '*.xlsx *.xls'), ('Всички файлове', '*.*')],
+            initialdir=os.getcwd(),
+            parent=r,
+        )
+    )
+    if not source_file:
+        log('Операцията е отменена от потребителя.')
+        return
+
+    initial_dir = os.path.dirname(source_file) if os.path.exists(source_file) else os.getcwd()
+    initial_name = 'invoice_pro_partners_import_ready.xlsx'
+    target_file = with_tk_dialog(
+        lambda r: filedialog.asksaveasfilename(
+            title='Запази готовия файл за импорт в Invoice Pro',
+            initialdir=initial_dir,
+            initialfile=initial_name,
+            defaultextension='.xlsx',
+            filetypes=[('Excel файлове', '*.xlsx'), ('Всички файлове', '*.*')],
+            parent=r,
+        )
+    )
+    if not target_file:
+        log('Операцията е отменена от потребителя.')
+        return
+
+    log(f'✓ Избран входен файл: {source_file}')
+    log(f'✓ Избран изходен файл: {target_file}')
+    log('=== КОНВЕРТИРАНЕ WAREHOUSE PARTNERS -> INVOICE PRO ПАРТНЬОРИ ===')
+
+    try:
+        try:
+            df_source = pd.read_excel(source_file, sheet_name='Partners')
+        except ValueError:
+            df_source = pd.read_excel(source_file, sheet_name=0)
+            log("ℹ Sheet 'Partners' не е намерен. Използван е първият sheet.")
+
+        if df_source.empty:
+            log('✗ Входният файл е празен.')
+            return
+
+        output_rows = []
+        generated_partner_ids = 0
+
+        for idx, row in df_source.iterrows():
+            partner_id_raw = _pick_first_existing_value(row, ['PartnerID', 'ID', 'MainPartnerID'], default=idx + 1)
+            try:
+                partner_id = int(float(partner_id_raw))
+            except Exception:
+                generated_partner_ids += 1
+                partner_id = idx + 1
+
+            output_rows.append(
+                {
+                    'PartnerID': partner_id,
+                    'Име': _pick_first_existing_value(row, ['Company', 'Name'], default=''),
+                    'Име (EN)': _pick_first_existing_value(row, ['NameEnglish'], default=''),
+                    'Лице за контакт': _pick_first_existing_value(row, ['MOL', 'ContactName'], default=''),
+                    'Лице за контакт (EN)': _pick_first_existing_value(row, ['ContactNameEnglish'], default=''),
+                    'EMail': _pick_first_existing_value(row, ['EMail', 'Email'], default=''),
+                    'Булстат': _pick_first_existing_value(row, ['Bulstat'], default=''),
+                    'ДДС Номер': _pick_first_existing_value(row, ['TaxNo', 'VatId'], default=''),
+                    'Банка': _pick_first_existing_value(row, ['BankName'], default=''),
+                    'Банков код': _pick_first_existing_value(row, ['BankCode'], default=''),
+                    'Банкова сметка': _pick_first_existing_value(row, ['BankAccount'], default=''),
+                    'Priority': _pick_first_existing_value(row, ['Priority'], default=0),
+                    'GroupID': _pick_first_existing_value(row, ['GroupID'], default=1),
+                    'Visible': _pick_first_existing_value(row, ['Visible'], default=1),
+                    'MainPartnerID': partner_id,
+                    'StatusID': _pick_first_existing_value(row, ['StatusID'], default=1),
+                    'IsExported': _pick_first_existing_value(row, ['IsExported'], default=0),
+                    'IsOSSPartner': _pick_first_existing_value(row, ['IsOSSPartner'], default=0),
+                    'CountryID': _pick_first_existing_value(row, ['CountryID'], default=0),
+                    'DocumentEndDatePeriod': _pick_first_existing_value(row, ['DocumentEndDatePeriod'], default=0),
+                }
+            )
+
+        df_output = pd.DataFrame(output_rows)
+
+        with pd.ExcelWriter(target_file, engine='openpyxl') as writer:
+            df_output.to_excel(writer, index=False, sheet_name='Партньори')
+
+        if generated_partner_ids > 0:
+            log(f'⚠ За {generated_partner_ids} записа PartnerID беше генериран автоматично.')
+
+        log(f'✓ Готов файл за импорт: {target_file}')
+        log(f'✓ Конвертирани партньори: {len(df_output)}')
+        if with_tk_dialog(
+            lambda r: messagebox.askyesno(
+                'Успех',
+                f'Конвертирани са {len(df_output)} партньора.\nДа се отвори ли файлът?',
+                parent=r,
+            )
+        ):
+            os.startfile(target_file)
+    except Exception as e:
+        log(f'✗ Грешка при конвертиране на партньори: {e}')
+
+
 # Backward-compatible aliases for legacy imports/calls.
 prepare_import_data = build_items_import_payload
 import_items_from_excel = import_items_excel
+convert_warehouse_partners_to_invoice_pro_excel = convert_warehouse_partners_excel_for_invoice_pro
