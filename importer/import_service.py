@@ -109,6 +109,22 @@ def _to_clean_string(value, default=''):
     return text if text and text.lower() != 'nan' else default
 
 
+def _to_identifier_string(value, default=''):
+    text = _to_clean_string(value, default=default)
+    if not text:
+        return text
+
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+
+    if text.endswith('.0'):
+        head = text[:-2]
+        if head.isdigit():
+            return head
+
+    return text
+
+
 def build_partners_import_payload(df, log):
     if not any(col in df.columns for col in PARTNERS_NAME_COLUMNS):
         log("✗ Липсва колона за име (очаква се 'Име', 'Name' или 'Company').")
@@ -136,8 +152,8 @@ def build_partners_import_payload(df, log):
                 default=transliterate(contact_name),
             ),
             'EMail': _to_clean_string(_pick_first_existing_value(row, ['EMail', 'Email'], default='')),
-            'Bulstat': _to_clean_string(_pick_first_existing_value(row, ['Булстат', 'Bulstat'], default='')),
-            'VatId': _to_clean_string(_pick_first_existing_value(row, ['ДДС Номер', 'VatId', 'TaxNo'], default='')),
+            'Bulstat': _to_identifier_string(_pick_first_existing_value(row, ['Булстат', 'Bulstat'], default='')),
+            'VatId': _to_identifier_string(_pick_first_existing_value(row, ['ДДС Номер', 'VatId', 'TaxNo'], default='')),
             'BankName': _to_clean_string(_pick_first_existing_value(row, ['Банка', 'BankName'], default='')),
             'BankCode': _to_clean_string(_pick_first_existing_value(row, ['Банков код', 'BankCode'], default='')),
             'BankAccount': _to_clean_string(_pick_first_existing_value(row, ['Банкова сметка', 'BankAccount'], default='')),
