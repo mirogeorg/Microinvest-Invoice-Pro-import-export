@@ -515,6 +515,106 @@ class ExcelSQLManager:
             if conn:
                 conn.close()
 
+    def get_access_odbc_driver(self):
+        """Връща наличен ODBC драйвер за Microsoft Access или None."""
+        drivers = pyodbc.drivers()
+        access_drivers = [
+            "Microsoft Access Driver (*.mdb, *.accdb)",
+            "Microsoft Access Driver (*.mdb)"
+        ]
+        for driver in access_drivers:
+            if driver in drivers:
+                return driver
+        return None
+
+    def export_warehouse_pro_partners_to_excel(self):
+        default_mdb_file = r"C:\ProgramData\Microinvest\Warehouse ProMicroinvestю.mdb"
+        mdb_file = input(
+            f"Въведете път до .MDB файл [{default_mdb_file}]: "
+        ).strip().strip('"')
+        if not mdb_file:
+            mdb_file = default_mdb_file
+
+        if not os.path.exists(mdb_file):
+            self.log(f"✗ .MDB файлът не е намерен: {mdb_file}")
+            return
+
+        access_driver = self.get_access_odbc_driver()
+        if not access_driver:
+            self.log("✗ Не е намерен ODBC драйвер за Microsoft Access.")
+            self.log("  Инсталирайте Microsoft Access Database Engine (x64).")
+            return
+
+        initial_dir = os.path.dirname(mdb_file) if os.path.exists(mdb_file) else os.getcwd()
+        initial_name = "warehouse_pro_partners_exported.xlsx"
+        export_file = self._with_tk_dialog(lambda r: filedialog.asksaveasfilename(
+            title="Запази Excel файл като",
+            initialdir=initial_dir,
+            initialfile=initial_name,
+            defaultextension=".xlsx",
+            filetypes=[("Excel файлове", "*.xlsx"), ("Всички файлове", "*.*")],
+            parent=r
+        ))
+        if not export_file:
+            self.log("Експортът е отменен от потребителя.")
+            return
+
+        if os.path.exists(export_file):
+            try:
+                os.remove(export_file)
+            except Exception:
+                self._with_tk_dialog(lambda r: messagebox.showerror(
+                    "Грешка",
+                    "Файлът е отворен в друга програма.\nМоля затворете го.",
+                    parent=r
+                ))
+                return
+
+        password = "Microinvest6380"
+        conn = None
+
+        self.log("=== ЕКСПОРТ WAREHOUSE PRO PARTNERS -> EXCEL ===")
+        self.log(f"MDB файл: {mdb_file}")
+        self.log("Таблица: Partners")
+
+        try:
+            conn_str = (
+                f"DRIVER={{{access_driver}}};"
+                f"DBQ={mdb_file};"
+                f"PWD={password};"
+            )
+            conn = pyodbc.connect(conn_str, timeout=CONFIG['login_timeout'])
+
+            query_partners = "SELECT * FROM [Partners]"
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                df_partners = pd.read_sql(query_partners, conn)
+
+            if df_partners.empty:
+                self.log("ℹ Таблица 'Partners' е празна.")
+
+            with pd.ExcelWriter(export_file, engine='openpyxl') as writer:
+                df_partners.to_excel(writer, index=False, sheet_name='Partners')
+                ws_partners = writer.sheets['Partners']
+                self.auto_adjust_column_width(ws_partners)
+                self.format_header_bold(ws_partners)
+
+            self.log(f"✓ Експортирани {len(df_partners)} партньора")
+            if self._with_tk_dialog(lambda r: messagebox.askyesno(
+                "Успех",
+                f"Експортирани са {len(df_partners)} партньора.\nДа се отвори ли файла?",
+                parent=r
+            )):
+                os.startfile(export_file)
+
+        except Exception as e:
+            self.log(f"✗ Грешка при експорт от Warehouse Pro: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            if conn:
+                conn.close()
+
     def export_to_excel(self):
         """Backwards-compatible alias към експорт на Items."""
         self.export_items_to_excel()
@@ -666,11 +766,12 @@ class ExcelSQLManager:
         print(f"Сървър: {CONFIG['server']} | База: {CONFIG['database']}")
         print(f"Таблица: {CONFIG['table_name']}")
         print("-"*60)
-        print("1. 📤 Експорт Items + свързани таблици → Excel")
-        print("2. 📤 Експорт Partners → Excel")
-        print("3. 📥 Импорт Excel → SQL")
-        print("4. 🗃️ Смяна на база данни")
-        print("5. 🚪 Изход")
+        print("1. 📤 Експорт Invoice Pro Стоки + свързани таблици → Excel")
+        print("2. 📤 Експорт Invoice Pro Партньори → Excel")
+        print("3. 📤 Експорт Warehouse Pro партньори -> Excel")
+        print("4. 📥 Импорт Excel → SQL")
+        print("5. 🗃️ Смяна на база данни")
+        print("6. 🚪 Изход")
         print("="*60)
     
     def run(self):
@@ -691,17 +792,19 @@ class ExcelSQLManager:
         
         while True:
             self.show_menu()
-            choice = input("Изберете (1-5): ").strip()
+            choice = input("Изберете (1-6): ").strip()
             
             if choice == '1':
                 self.export_items_to_excel()
             elif choice == '2':
                 self.export_partners_to_excel()
             elif choice == '3':
-                self.import_from_excel()
+                self.export_warehouse_pro_partners_to_excel()
             elif choice == '4':
-                self.prompt_database_selection()
+                self.import_from_excel()
             elif choice == '5':
+                self.prompt_database_selection()
+            elif choice == '6':
                 self.log("Изход...")
                 break
             else:
