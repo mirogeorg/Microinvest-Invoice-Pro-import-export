@@ -13,7 +13,7 @@ except ImportError:
     from utils import parse_id_value, transliterate, with_tk_dialog
 
 
-def prepare_import_data(df, log):
+def build_items_import_payload(df, log):
     log('Подготовка на данните...')
     df = df.dropna(subset=['Код', 'Стока'], how='all')
     df['Цена'] = df['Цена'].fillna(0)
@@ -78,7 +78,7 @@ def prepare_import_data(df, log):
     return data
 
 
-def import_items_from_excel(log, config=CONFIG):
+def import_items_excel(log, config=CONFIG):
     if not ensure_database_selected(config, log):
         log('Импортът е отменен: няма избрана база данни.')
         return
@@ -128,7 +128,7 @@ def import_items_from_excel(log, config=CONFIG):
         ):
             return
 
-        data = prepare_import_data(df, log)
+        data = build_items_import_payload(df, log)
         if not data:
             return
 
@@ -178,3 +178,8 @@ def import_items_from_excel(log, config=CONFIG):
 
     except Exception as e:
         log(f'✗ Грешка при импорт: {e}')
+
+
+# Backward-compatible aliases for legacy imports/calls.
+prepare_import_data = build_items_import_payload
+import_items_from_excel = import_items_excel

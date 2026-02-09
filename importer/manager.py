@@ -6,13 +6,13 @@ import pyodbc
 try:
     from .config import CONFIG
     from .db import check_odbc_driver, get_connection_string, prompt_database_selection
-    from .exporters import export_items_to_excel, export_partners_to_excel, export_warehouse_pro_partners_to_excel
-    from .importers import import_items_from_excel
+    from .export_service import export_items_excel, export_partners_excel, export_warehouse_partners_excel
+    from .import_service import import_items_excel
 except ImportError:
     from config import CONFIG
     from db import check_odbc_driver, get_connection_string, prompt_database_selection
-    from exporters import export_items_to_excel, export_partners_to_excel, export_warehouse_pro_partners_to_excel
-    from importers import import_items_from_excel
+    from export_service import export_items_excel, export_partners_excel, export_warehouse_partners_excel
+    from import_service import import_items_excel
 
 
 def log(message):
@@ -55,13 +55,13 @@ def run_app(config=CONFIG):
         choice = input('Изберете (1-6): ').strip()
 
         if choice == '1':
-            export_items_to_excel(log, config)
+            export_items_excel(log, config)
         elif choice == '2':
-            export_partners_to_excel(log, config)
+            export_partners_excel(log, config)
         elif choice == '3':
-            export_warehouse_pro_partners_to_excel(log, config)
+            export_warehouse_partners_excel(log, config)
         elif choice == '4':
-            import_items_from_excel(log, config)
+            import_items_excel(log, config)
         elif choice == '5':
             prompt_database_selection(config, log)
         elif choice == '6':

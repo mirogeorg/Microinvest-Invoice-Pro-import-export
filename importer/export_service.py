@@ -27,7 +27,7 @@ except ImportError:
     )
 
 
-def export_items_to_excel(log, config=CONFIG):
+def export_items_excel(log, config=CONFIG):
     if not ensure_database_selected(config, log):
         log('Експортът е отменен: няма избрана база данни.')
         return
@@ -164,7 +164,7 @@ def export_items_to_excel(log, config=CONFIG):
             conn.close()
 
 
-def export_partners_to_excel(log, config=CONFIG):
+def export_partners_excel(log, config=CONFIG):
     if not ensure_database_selected(config, log):
         log('Експортът е отменен: няма избрана база данни.')
         return
@@ -267,7 +267,7 @@ def export_partners_to_excel(log, config=CONFIG):
             conn.close()
 
 
-def export_warehouse_pro_partners_to_excel(log, config=CONFIG):
+def export_warehouse_partners_excel(log, config=CONFIG):
     default_mdb_file = r'C:\ProgramData\Microinvest\Warehouse Pro\Microinvest.mdb'
     mdb_file = input(f"Въведете път до .MDB файл на Warehouse Pro [{default_mdb_file}]: ").strip().strip('"')
     if not mdb_file:
@@ -350,4 +350,10 @@ def export_warehouse_pro_partners_to_excel(log, config=CONFIG):
 
 
 def export_to_excel(log, config=CONFIG):
-    export_items_to_excel(log, config)
+    export_items_excel(log, config)
+
+
+# Backward-compatible aliases for legacy imports/calls.
+export_items_to_excel = export_items_excel
+export_partners_to_excel = export_partners_excel
+export_warehouse_pro_partners_to_excel = export_warehouse_partners_excel

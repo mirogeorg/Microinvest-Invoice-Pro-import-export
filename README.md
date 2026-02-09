@@ -22,8 +22,8 @@ Microinvest-Invoice-Pro-import-export/
 |  |- .env.example
 |  |- config.py
 |  |- db.py
-|  |- exporters.py
-|  |- importers.py
+|  |- export_service.py
+|  |- import_service.py
 |  |- manager.py
 |  |- main.py
 |  |- utils.py
