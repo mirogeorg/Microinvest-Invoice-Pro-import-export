@@ -18,7 +18,7 @@ load_dotenv(dotenv_path=env_path)
 # ==================== КОНФИГУРАЦИЯ ОТ .ENV ====================
 CONFIG = {
     'server': os.getenv('DB_SERVER', '.'),
-    'database': os.getenv('DB_DATABASE', 'InvoicePro_26020309341273'),
+    'database': os.getenv('DB_DATABASE', ''),
     'table_name': os.getenv('DB_TABLE', 'Items'),
     'excel_file': os.getenv('EXCEL_FILE', None),
     'sheet_name': int(os.getenv('EXCEL_SHEET', '0')),
@@ -115,6 +115,14 @@ class ExcelSQLManager:
                     return True
                 else:
                     print("Моля въведете валиден номер или име от списъка!")
+    
+    def ensure_database_selected(self):
+        """Гарантира, че има избрана база данни преди операция"""
+        if str(CONFIG.get('database', '')).strip():
+            return True
+        self.log("⚠ Името на базата данни е празно.")
+        self.log("  Изберете база данни от списъка:")
+        return self.prompt_database_selection()
     
     def check_table_exists(self, conn, table_name=None):
         """Проверява дали таблицата съществува в текущата база"""
@@ -248,6 +256,9 @@ class ExcelSQLManager:
     
     def connect_with_fallback(self):
         """Опитва се да се свърже, при неуспех предлага избор на база"""
+        if not self.ensure_database_selected():
+            return None
+        
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
@@ -274,6 +285,10 @@ class ExcelSQLManager:
                 return None
     
     def export_to_excel(self):
+        if not self.ensure_database_selected():
+            self.log("Експортът е отменен: няма избрана база данни.")
+            return
+        
         initial_dir = os.path.dirname(CONFIG['excel_file']) if CONFIG['excel_file'] and os.path.exists(CONFIG['excel_file']) else os.getcwd()
         initial_name = "items_exported.xlsx"
         export_file = self._with_tk_dialog(lambda r: filedialog.asksaveasfilename(
@@ -488,6 +503,10 @@ class ExcelSQLManager:
         return data
     
     def import_from_excel(self):
+        if not self.ensure_database_selected():
+            self.log("Импортът е отменен: няма избрана база данни.")
+            return
+        
         import_file = self._with_tk_dialog(lambda r: filedialog.askopenfilename(
             title="Изберете Excel файл за импорт",
             filetypes=[("Excel файлове", "*.xlsx *.xls"), ("Всички файлове", "*.*")],
