@@ -284,7 +284,7 @@ class ExcelSQLManager:
                 self.log(f"✗ Неочаквана грешка: {e}")
                 return None
     
-    def export_to_excel(self):
+    def export_items_to_excel(self):
         if not self.ensure_database_selected():
             self.log("Експортът е отменен: няма избрана база данни.")
             return
@@ -356,33 +356,6 @@ class ExcelSQLManager:
                 [TypeIdentifier] as 'Тип', [VatValue] as 'Стойност'
                 FROM [dbo].[VatTerms] ORDER BY [VatTermID]"""
 
-            query_partners = """
-            SELECT
-                [PartnerID] as 'PartnerID',
-                [Name] as 'Име',
-                [NameEnglish] as 'Име (EN)',
-                [ContactName] as 'Лице за контакт',
-                [ContactNameEnglish] as 'Лице за контакт (EN)',
-                [EMail] as 'EMail',
-                [Bulstat] as 'Булстат',
-                [VatId] as 'ДДС Номер',
-                [BankName] as 'Банка',
-                [BankCode] as 'Банков код',
-                [BankAccount] as 'Банкова сметка',
-                [Priority] as 'Priority',
-                [GroupID] as 'GroupID',
-                [Visible] as 'Visible',
-                [MainPartnerID] as 'MainPartnerID',
-                [StatusID] as 'StatusID',
-                [IsExported] as 'IsExported',
-                [IsOSSPartner] as 'IsOSSPartner',
-                [CountryID] as 'CountryID',
-                [DocumentEndDatePeriod] as 'DocumentEndDatePeriod'
-            FROM [dbo].[Partners]
-            WHERE [Visible] = 1
-            ORDER BY [Name]
-            """
-            
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 df_items = pd.read_sql(query_items, conn)
@@ -390,12 +363,6 @@ class ExcelSQLManager:
                 df_itemgroups = pd.read_sql(query_itemgroups, conn)
                 df_status = pd.read_sql(query_status, conn)
                 df_vatterms = pd.read_sql(query_vatterms, conn)
-                partners_table_exists = self.check_table_exists(conn, 'Partners')
-                df_partners = pd.DataFrame()
-                if partners_table_exists:
-                    df_partners = pd.read_sql(query_partners, conn)
-                else:
-                    self.log("⚠ Таблица 'Partners' не е намерена. Sheet 'Партньори' няма да бъде генериран.")
             
             if df_items.empty:
                 self.log("ℹ Няма видими записи в 'Items'. Ще бъде създаден празен sheet 'Items'.")
@@ -435,12 +402,6 @@ class ExcelSQLManager:
                     df_vatterms[['ДДС Срок ID', 'Display', 'Описание', 'Тип']].to_excel(writer, index=False, sheet_name='VatTerms')
                     if items_count > 0:
                         self.add_dropdown_validation(ws_items, 'H', 'VatTerms', 'B', 2, items_count + 1)
-
-                if partners_table_exists:
-                    df_partners.to_excel(writer, index=False, sheet_name='Партньори')
-                    ws_partners = writer.sheets['Партньори']
-                    self.auto_adjust_column_width(ws_partners)
-                    self.format_header_bold(ws_partners)
             
             self.log(f"✓ Експортирани {len(df_items)} записа")
             if self._with_tk_dialog(lambda r: messagebox.askyesno("Успех", 
@@ -454,6 +415,109 @@ class ExcelSQLManager:
         finally:
             if conn:
                 conn.close()
+
+    def export_partners_to_excel(self):
+        if not self.ensure_database_selected():
+            self.log("Експортът е отменен: няма избрана база данни.")
+            return
+
+        initial_dir = os.path.dirname(CONFIG['excel_file']) if CONFIG['excel_file'] and os.path.exists(CONFIG['excel_file']) else os.getcwd()
+        initial_name = "partners_exported.xlsx"
+        export_file = self._with_tk_dialog(lambda r: filedialog.asksaveasfilename(
+            title="Запази Excel файл като",
+            initialdir=initial_dir,
+            initialfile=initial_name,
+            defaultextension=".xlsx",
+            filetypes=[("Excel файлове", "*.xlsx"), ("Всички файлове", "*.*")],
+            parent=r
+        ))
+        if not export_file:
+            self.log("Експортът е отменен от потребителя.")
+            return
+
+        self.log(f"=== ЕКСПОРТ НА PARTNERS ОТ SQL КЪМ EXCEL ===")
+        self.log(f"Сървър: {CONFIG['server']}")
+        self.log(f"База: {CONFIG['database']}")
+        self.log("Таблица: Partners")
+
+        if os.path.exists(export_file):
+            try:
+                os.remove(export_file)
+            except Exception:
+                self._with_tk_dialog(lambda r: messagebox.showerror("Грешка",
+                    f"Файлът е отворен в друга програма.\nМоля затворете го.", parent=r))
+                return
+
+        conn = self.connect_with_fallback()
+        if not conn:
+            return
+
+        try:
+            if not self.check_table_exists(conn, 'Partners'):
+                self.log("✗ Таблица 'Partners' не е намерена в избраната база.")
+                self._with_tk_dialog(lambda r: messagebox.showerror(
+                    "Грешка",
+                    "Таблица 'Partners' не е намерена в избраната база.",
+                    parent=r
+                ))
+                return
+
+            query_partners = """
+            SELECT
+                [PartnerID] as 'PartnerID',
+                [Name] as 'Име',
+                [NameEnglish] as 'Име (EN)',
+                [ContactName] as 'Лице за контакт',
+                [ContactNameEnglish] as 'Лице за контакт (EN)',
+                [EMail] as 'EMail',
+                [Bulstat] as 'Булстат',
+                [VatId] as 'ДДС Номер',
+                [BankName] as 'Банка',
+                [BankCode] as 'Банков код',
+                [BankAccount] as 'Банкова сметка',
+                [Priority] as 'Priority',
+                [GroupID] as 'GroupID',
+                [Visible] as 'Visible',
+                [MainPartnerID] as 'MainPartnerID',
+                [StatusID] as 'StatusID',
+                [IsExported] as 'IsExported',
+                [IsOSSPartner] as 'IsOSSPartner',
+                [CountryID] as 'CountryID',
+                [DocumentEndDatePeriod] as 'DocumentEndDatePeriod'
+            FROM [dbo].[Partners]
+            WHERE [Visible] = 1
+            ORDER BY [Name]
+            """
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                df_partners = pd.read_sql(query_partners, conn)
+
+            if df_partners.empty:
+                self.log("ℹ Няма видими записи в 'Partners'. Ще бъде създаден празен sheet 'Партньори'.")
+
+            with pd.ExcelWriter(export_file, engine='openpyxl') as writer:
+                df_partners.to_excel(writer, index=False, sheet_name='Партньори')
+                ws_partners = writer.sheets['Партньори']
+                self.auto_adjust_column_width(ws_partners)
+                self.format_header_bold(ws_partners)
+
+            self.log(f"✓ Експортирани {len(df_partners)} партньора")
+            if self._with_tk_dialog(lambda r: messagebox.askyesno("Успех",
+                f"Експортирани са {len(df_partners)} партньора.\nДа се отвори ли файла?", parent=r)):
+                os.startfile(export_file)
+
+        except Exception as e:
+            self.log(f"✗ Грешка при експорт на Partners: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            if conn:
+                conn.close()
+
+    def export_to_excel(self):
+        """Backwards-compatible alias към експорт на Items."""
+        self.export_items_to_excel()
     
     def prepare_import_data(self, df):
         self.log("Подготовка на данните...")
@@ -602,10 +666,11 @@ class ExcelSQLManager:
         print(f"Сървър: {CONFIG['server']} | База: {CONFIG['database']}")
         print(f"Таблица: {CONFIG['table_name']}")
         print("-"*60)
-        print("1. 📤 Експорт Microinvest Invoice Pro → Excel")
-        print("2. 📥 Импорт Excel → SQL")
-        print("3. 🗃️  Смяна на база данни")
-        print("4. 🚪 Изход")
+        print("1. 📤 Експорт Items + свързани таблици → Excel")
+        print("2. 📤 Експорт Partners → Excel")
+        print("3. 📥 Импорт Excel → SQL")
+        print("4. 🗃️ Смяна на база данни")
+        print("5. 🚪 Изход")
         print("="*60)
     
     def run(self):
@@ -626,15 +691,17 @@ class ExcelSQLManager:
         
         while True:
             self.show_menu()
-            choice = input("Изберете (1-4): ").strip()
+            choice = input("Изберете (1-5): ").strip()
             
             if choice == '1':
-                self.export_to_excel()
+                self.export_items_to_excel()
             elif choice == '2':
-                self.import_from_excel()
+                self.export_partners_to_excel()
             elif choice == '3':
-                self.prompt_database_selection()
+                self.import_from_excel()
             elif choice == '4':
+                self.prompt_database_selection()
+            elif choice == '5':
                 self.log("Изход...")
                 break
             else:
