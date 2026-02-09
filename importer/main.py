@@ -1,12 +1,11 @@
 try:
-    from .manager import ExcelSQLManager
+    from .manager import run_app
 except ImportError:
-    from manager import ExcelSQLManager
+    from manager import run_app
 
 
 def main():
-    app = ExcelSQLManager()
-    app.run()
+    run_app()
 
 
 if __name__ == '__main__':
