@@ -13,6 +13,10 @@ except ImportError:
     from utils import parse_id_value, transliterate, with_tk_dialog
 
 
+PARTNERS_ID_COLUMNS = ['PartnerID', 'ID', 'MainPartnerID']
+PARTNERS_NAME_COLUMNS = ['Име', 'Name', 'Company']
+
+
 def build_items_import_payload(df, log):
     log('Подготовка на данните...')
     df = df.dropna(subset=['Код', 'Стока'], how='all')
@@ -76,6 +80,101 @@ def build_items_import_payload(df, log):
     if skipped > 0:
         log(f'Пропуснати {skipped} невалидни реда')
     return data
+
+
+def _to_int(value, default=0):
+    if pd.isna(value):
+        return default
+
+    if isinstance(value, bool):
+        return int(value)
+
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ('true', 'yes', 'да'):
+            return 1
+        if normalized in ('false', 'no', 'не'):
+            return 0
+
+    parsed = parse_id_value(value)
+    if parsed is not None:
+        return parsed
+
+    return default
+
+
+def _to_clean_string(value, default=''):
+    if pd.isna(value):
+        return default
+    text = str(value).strip()
+    return text if text and text.lower() != 'nan' else default
+
+
+def build_partners_import_payload(df, log):
+    if not any(col in df.columns for col in PARTNERS_ID_COLUMNS):
+        log("✗ Липсва колона за идентификатор (очаква се 'PartnerID', 'ID' или 'MainPartnerID').")
+        return []
+
+    if not any(col in df.columns for col in PARTNERS_NAME_COLUMNS):
+        log("✗ Липсва колона за име (очаква се 'Име', 'Name' или 'Company').")
+        return []
+
+    data_by_partner_id = {}
+    skipped = 0
+    duplicates = 0
+
+    for idx, row in df.iterrows():
+        partner_id_raw = _pick_first_existing_value(row, PARTNERS_ID_COLUMNS, default=None)
+        partner_id = _to_int(partner_id_raw, default=None)
+
+        name = _to_clean_string(_pick_first_existing_value(row, ['Име', 'Name', 'Company'], default=''))
+        if partner_id is None or partner_id <= 0 or not name:
+            skipped += 1
+            continue
+
+        contact_name = _to_clean_string(_pick_first_existing_value(row, ['Лице за контакт', 'ContactName', 'MOL'], default=''))
+        payload = {
+            'PartnerID': partner_id,
+            'Name': name,
+            'NameEnglish': _to_clean_string(
+                _pick_first_existing_value(row, ['Име (EN)', 'NameEnglish'], default=''),
+                default=transliterate(name),
+            ),
+            'ContactName': contact_name,
+            'ContactNameEnglish': _to_clean_string(
+                _pick_first_existing_value(row, ['Лице за контакт (EN)', 'ContactNameEnglish'], default=''),
+                default=transliterate(contact_name),
+            ),
+            'EMail': _to_clean_string(_pick_first_existing_value(row, ['EMail', 'Email'], default='')),
+            'Bulstat': _to_clean_string(_pick_first_existing_value(row, ['Булстат', 'Bulstat'], default='')),
+            'VatId': _to_clean_string(_pick_first_existing_value(row, ['ДДС Номер', 'VatId', 'TaxNo'], default='')),
+            'BankName': _to_clean_string(_pick_first_existing_value(row, ['Банка', 'BankName'], default='')),
+            'BankCode': _to_clean_string(_pick_first_existing_value(row, ['Банков код', 'BankCode'], default='')),
+            'BankAccount': _to_clean_string(_pick_first_existing_value(row, ['Банкова сметка', 'BankAccount'], default='')),
+            'Priority': _to_int(_pick_first_existing_value(row, ['Priority'], default=0), default=0),
+            'GroupID': _to_int(_pick_first_existing_value(row, ['GroupID'], default=1), default=1),
+            'Visible': _to_int(_pick_first_existing_value(row, ['Visible'], default=1), default=1),
+            'MainPartnerID': _to_int(_pick_first_existing_value(row, ['MainPartnerID'], default=partner_id), default=partner_id),
+            'StatusID': _to_int(_pick_first_existing_value(row, ['StatusID'], default=1), default=1),
+            'IsExported': _to_int(_pick_first_existing_value(row, ['IsExported'], default=0), default=0),
+            'IsOSSPartner': _to_int(_pick_first_existing_value(row, ['IsOSSPartner'], default=0), default=0),
+            'CountryID': _to_int(_pick_first_existing_value(row, ['CountryID'], default=0), default=0),
+            'DocumentEndDatePeriod': _to_int(
+                _pick_first_existing_value(row, ['DocumentEndDatePeriod'], default=0),
+                default=0,
+            ),
+        }
+
+        if partner_id in data_by_partner_id:
+            duplicates += 1
+        data_by_partner_id[partner_id] = payload
+
+    if skipped > 0:
+        log(f'⚠ Пропуснати {skipped} невалидни реда.')
+    if duplicates > 0:
+        log(f'⚠ Открити {duplicates} дублирани PartnerID. Използван е последният срещнат ред.')
+
+    return list(data_by_partner_id.values())
 
 
 def import_items_excel(log, config=CONFIG):
@@ -178,6 +277,191 @@ def import_items_excel(log, config=CONFIG):
 
     except Exception as e:
         log(f'✗ Грешка при импорт: {e}')
+
+
+def import_partners_excel(log, config=CONFIG):
+    if not ensure_database_selected(config, log):
+        log('Импортът е отменен: няма избрана база данни.')
+        return
+
+    import_file = with_tk_dialog(
+        lambda r: filedialog.askopenfilename(
+            title='Изберете Excel файл за импорт на партньори',
+            filetypes=[('Excel файлове', '*.xlsx *.xls'), ('Всички файлове', '*.*')],
+            initialdir=os.getcwd(),
+            parent=r,
+        )
+    )
+    if not import_file:
+        log('Импортът е отменен от потребителя.')
+        return
+
+    log(f'✓ Избран файл за импорт: {import_file}')
+    log('=== ИМПОРТ EXCEL -> INVOICE PRO PARTNERS ===')
+
+    if not os.path.exists(import_file):
+        log('✗ Файлът не съществува!')
+        return
+
+    try:
+        try:
+            df = pd.read_excel(import_file, sheet_name='Партньори')
+        except ValueError:
+            try:
+                df = pd.read_excel(import_file, sheet_name='Partners')
+            except ValueError:
+                df = pd.read_excel(import_file, sheet_name=0)
+                log("ℹ Sheet 'Партньори'/'Partners' не е намерен. Използван е първият sheet.")
+
+        if df.empty:
+            log('✗ Файлът е празен!')
+            return
+
+        print('\nПърви 3 реда:')
+        print(df.head(3).to_string())
+
+        if not with_tk_dialog(
+            lambda r: messagebox.askyesno(
+                'Потвърждение',
+                f'Ще бъдат импортирани/обновени до {len(df)} партньора.\nПотвърждавате ли?',
+                parent=r,
+            )
+        ):
+            return
+
+        data = build_partners_import_payload(df, log)
+        if not data:
+            return
+
+        conn = connect_with_fallback(config, log)
+        if not conn:
+            return
+
+        cursor = conn.cursor()
+        partner_id_is_identity = False
+
+        try:
+            cursor.execute(
+                """
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_NAME = 'Partners' AND TABLE_TYPE = 'BASE TABLE'
+                """
+            )
+            if cursor.fetchone()[0] == 0:
+                log("✗ Таблица 'Partners' не е намерена в избраната база.")
+                return
+
+            cursor.execute("SELECT [PartnerID] FROM [dbo].[Partners]")
+            existing_partner_ids = {int(row[0]) for row in cursor.fetchall() if row[0] is not None}
+
+            cursor.execute("SELECT COLUMNPROPERTY(OBJECT_ID('dbo.Partners'), 'PartnerID', 'IsIdentity')")
+            row = cursor.fetchone()
+            partner_id_is_identity = bool(row and row[0] == 1)
+
+            if partner_id_is_identity:
+                cursor.execute("SET IDENTITY_INSERT [dbo].[Partners] ON")
+
+            insert_sql = """
+                INSERT INTO [dbo].[Partners] (
+                    PartnerID, Name, NameEnglish, ContactName, ContactNameEnglish, EMail, Bulstat,
+                    VatId, BankName, BankCode, BankAccount, Priority, GroupID, Visible, MainPartnerID,
+                    StatusID, IsExported, IsOSSPartner, CountryID, DocumentEndDatePeriod
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            update_sql = """
+                UPDATE [dbo].[Partners]
+                SET
+                    Name = ?, NameEnglish = ?, ContactName = ?, ContactNameEnglish = ?, EMail = ?, Bulstat = ?,
+                    VatId = ?, BankName = ?, BankCode = ?, BankAccount = ?, Priority = ?, GroupID = ?,
+                    Visible = ?, MainPartnerID = ?, StatusID = ?, IsExported = ?, IsOSSPartner = ?,
+                    CountryID = ?, DocumentEndDatePeriod = ?
+                WHERE PartnerID = ?
+            """
+
+            inserted = 0
+            updated = 0
+
+            for i, partner in enumerate(data):
+                partner_id = partner['PartnerID']
+                insert_values = (
+                    partner_id,
+                    partner['Name'],
+                    partner['NameEnglish'],
+                    partner['ContactName'],
+                    partner['ContactNameEnglish'],
+                    partner['EMail'],
+                    partner['Bulstat'],
+                    partner['VatId'],
+                    partner['BankName'],
+                    partner['BankCode'],
+                    partner['BankAccount'],
+                    partner['Priority'],
+                    partner['GroupID'],
+                    partner['Visible'],
+                    partner['MainPartnerID'],
+                    partner['StatusID'],
+                    partner['IsExported'],
+                    partner['IsOSSPartner'],
+                    partner['CountryID'],
+                    partner['DocumentEndDatePeriod'],
+                )
+                update_values = (
+                    partner['Name'],
+                    partner['NameEnglish'],
+                    partner['ContactName'],
+                    partner['ContactNameEnglish'],
+                    partner['EMail'],
+                    partner['Bulstat'],
+                    partner['VatId'],
+                    partner['BankName'],
+                    partner['BankCode'],
+                    partner['BankAccount'],
+                    partner['Priority'],
+                    partner['GroupID'],
+                    partner['Visible'],
+                    partner['MainPartnerID'],
+                    partner['StatusID'],
+                    partner['IsExported'],
+                    partner['IsOSSPartner'],
+                    partner['CountryID'],
+                    partner['DocumentEndDatePeriod'],
+                    partner_id,
+                )
+
+                if partner_id in existing_partner_ids:
+                    cursor.execute(update_sql, update_values)
+                    updated += 1
+                else:
+                    cursor.execute(insert_sql, insert_values)
+                    existing_partner_ids.add(partner_id)
+                    inserted += 1
+
+                if (i + 1) % 100 == 0:
+                    log(f'  ... {i + 1}/{len(data)}')
+
+            conn.commit()
+            log(f'✓ Импортът приключи. Обновени: {updated}, добавени: {inserted}')
+            with_tk_dialog(
+                lambda r: messagebox.showinfo(
+                    'Успех',
+                    f'Импортът приключи успешно.\nОбновени: {updated}\nДобавени: {inserted}',
+                    parent=r,
+                )
+            )
+        except Exception as e:
+            conn.rollback()
+            log(f'✗ Грешка: {e}')
+            raise
+        finally:
+            if partner_id_is_identity:
+                try:
+                    cursor.execute("SET IDENTITY_INSERT [dbo].[Partners] OFF")
+                    conn.commit()
+                except Exception:
+                    pass
+            conn.close()
+    except Exception as e:
+        log(f'✗ Грешка при импорт на партньори: {e}')
 
 
 def _pick_first_existing_value(row, candidates, default=''):
@@ -296,4 +580,5 @@ def convert_warehouse_partners_excel_for_invoice_pro(log, config=CONFIG):
 # Backward-compatible aliases for legacy imports/calls.
 prepare_import_data = build_items_import_payload
 import_items_from_excel = import_items_excel
+import_partners_from_excel = import_partners_excel
 convert_warehouse_partners_to_invoice_pro_excel = convert_warehouse_partners_excel_for_invoice_pro
