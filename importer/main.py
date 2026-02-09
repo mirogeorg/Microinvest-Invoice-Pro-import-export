@@ -4,7 +4,6 @@ import os
 import sys
 import warnings
 import ctypes
-import json
 from datetime import datetime
 from copy import copy
 import tkinter as tk
@@ -28,18 +27,9 @@ CONFIG = {
     'login_timeout': int(os.getenv('DB_TIMEOUT', '15'))
 }
 
-SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app_config.json')
 EXPECTED_COLUMNS = ['Код', 'Стока', 'Мярка', 'Цена']
 
 class ExcelSQLManager:
-    def __init__(self):
-        self.selected_file = None
-        self.load_settings()
-        
-        if not self.selected_file and CONFIG['excel_file'] and os.path.exists(CONFIG['excel_file']):
-            self.selected_file = CONFIG['excel_file']
-            self.log(f"Зареден файл от .env: {self.selected_file}")
-    
     def log(self, message):
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         print(f"[{timestamp}] {message}")
@@ -167,29 +157,6 @@ class ExcelSQLManager:
                 print(f"Проверете дали SQL Server '{CONFIG['server']}' е достъпен.")
             return False
     
-    def load_settings(self):
-        try:
-            if os.path.exists(SETTINGS_FILE):
-                with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-                    settings = json.load(f)
-                    last_file = settings.get('last_selected_file')
-                    if last_file and os.path.exists(last_file):
-                        self.selected_file = last_file
-                        self.log(f"Зареден последен файл: {last_file}")
-        except Exception as e:
-            self.log(f"Не може да се заредят настройките: {e}")
-    
-    def save_settings(self):
-        try:
-            settings = {
-                'last_selected_file': self.selected_file,
-                'last_used': datetime.now().isoformat()
-            }
-            with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-                json.dump(settings, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            self.log(f"Не може да се запазят настройките: {e}")
-    
     def _with_tk_dialog(self, func):
         root = tk.Tk()
         root.withdraw()
@@ -279,32 +246,6 @@ class ExcelSQLManager:
         dv.add(cell_range)
         worksheet.add_data_validation(dv)
     
-    def select_file_dialog(self):
-        self.log("Отваряне на диалог за избор на файл...")
-        initial_dir = os.path.dirname(self.selected_file) if self.selected_file else os.getcwd()
-        
-        file_path = self._with_tk_dialog(lambda r: filedialog.askopenfilename(
-            title="Изберете Excel файл",
-            filetypes=[("Excel файлове", "*.xlsx *.xls"), ("Всички файлове", "*.*")],
-            initialdir=initial_dir,
-            parent=r
-        ))
-        
-        if file_path:
-            self.selected_file = file_path
-            self.save_settings()
-            self.log(f"✓ Избран файл: {file_path}")
-            return True
-        else:
-            self.log("✗ Не е избран файл")
-            return False
-    
-    def check_file_selected(self):
-        if not self.selected_file:
-            print("\n!!! Моля първо изберете файл (опция 1) !!!")
-            return False
-        return True
-    
     def connect_with_fallback(self):
         """Опитва се да се свърже, при неуспех предлага избор на база"""
         max_attempts = 3
@@ -333,11 +274,8 @@ class ExcelSQLManager:
                 return None
     
     def export_to_excel(self):
-        if not self.check_file_selected():
-            return
-        
-        initial_dir = os.path.dirname(self.selected_file) if self.selected_file else os.getcwd()
-        initial_name = os.path.splitext(os.path.basename(self.selected_file))[0] + "_exported.xlsx"
+        initial_dir = os.path.dirname(CONFIG['excel_file']) if CONFIG['excel_file'] and os.path.exists(CONFIG['excel_file']) else os.getcwd()
+        initial_name = "items_exported.xlsx"
         export_file = self._with_tk_dialog(lambda r: filedialog.asksaveasfilename(
             title="Запази Excel файл като",
             initialdir=initial_dir,
@@ -548,20 +486,28 @@ class ExcelSQLManager:
         return data
     
     def import_from_excel(self):
-        if not self.check_file_selected():
+        import_file = self._with_tk_dialog(lambda r: filedialog.askopenfilename(
+            title="Изберете Excel файл за импорт",
+            filetypes=[("Excel файлове", "*.xlsx *.xls"), ("Всички файлове", "*.*")],
+            initialdir=os.getcwd(),
+            parent=r
+        ))
+        if not import_file:
+            self.log("Импортът е отменен от потребителя.")
             return
-        
+
+        self.log(f"✓ Избран файл за импорт: {import_file}")
         self.log(f"=== ИМПОРТ ОТ EXCEL КЪМ SQL ===")
-        
-        if not os.path.exists(self.selected_file):
+
+        if not os.path.exists(import_file):
             self.log("✗ Файлът не съществува!")
             return
         
         try:
             try:
-                df = pd.read_excel(self.selected_file, sheet_name='Items', skiprows=CONFIG['skiprows'])
+                df = pd.read_excel(import_file, sheet_name='Items', skiprows=CONFIG['skiprows'])
             except ValueError:
-                df = pd.read_excel(self.selected_file, sheet_name=CONFIG['sheet_name'], skiprows=CONFIG['skiprows'])
+                df = pd.read_excel(import_file, sheet_name=CONFIG['sheet_name'], skiprows=CONFIG['skiprows'])
             
             if not all(col in df.columns for col in EXPECTED_COLUMNS):
                 self.log("✗ Липсват задължителни колони!")
@@ -634,17 +580,11 @@ class ExcelSQLManager:
         print("="*60)
         print(f"Сървър: {CONFIG['server']} | База: {CONFIG['database']}")
         print(f"Таблица: {CONFIG['table_name']}")
-        if self.selected_file:
-            path = self.selected_file if len(self.selected_file) < 50 else "..." + self.selected_file[-47:]
-            print(f"Файл: {path}")
-        else:
-            print("Файл: [не е избран]")
         print("-"*60)
-        print("1. 📂 Избор на файл")
-        print("2. 📤 Експорт Microinvest Invoice Pro → Excel")
-        print("3. 📥 Импорт Excel → SQL")
-        print("4. 🗃️  Смяна на база данни")
-        print("5. 🚪 Изход")
+        print("1. 📤 Експорт Microinvest Invoice Pro → Excel")
+        print("2. 📥 Импорт Excel → SQL")
+        print("3. 🗃️  Смяна на база данни")
+        print("4. 🚪 Изход")
         print("="*60)
     
     def run(self):
@@ -665,18 +605,15 @@ class ExcelSQLManager:
         
         while True:
             self.show_menu()
-            choice = input("Изберете (1-5): ").strip()
+            choice = input("Изберете (1-4): ").strip()
             
             if choice == '1':
-                self.select_file_dialog()
-            elif choice == '2':
                 self.export_to_excel()
-            elif choice == '3':
+            elif choice == '2':
                 self.import_from_excel()
-            elif choice == '4':
+            elif choice == '3':
                 self.prompt_database_selection()
-            elif choice == '5':
-                self.save_settings()
+            elif choice == '4':
                 self.log("Изход...")
                 break
             else:
