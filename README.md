@@ -20,7 +20,14 @@ Microinvest-Invoice-Pro-import-export/
 |- requirements.txt
 |- importer/
 |  |- .env.example
+|  |- config.py
+|  |- manager.py
 |  |- main.py
+|  |- mixins/
+|  |  |- common_mixin.py
+|  |  |- database_mixin.py
+|  |  |- export_mixin.py
+|  |  |- import_mixin.py
 |  |- app_config.json (created/updated after run)
 |- docs/
 ```
