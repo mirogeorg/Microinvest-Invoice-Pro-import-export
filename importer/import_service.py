@@ -13,7 +13,6 @@ except ImportError:
     from utils import parse_id_value, transliterate, with_tk_dialog
 
 
-PARTNERS_ID_COLUMNS = ['PartnerID', 'ID', 'MainPartnerID']
 PARTNERS_NAME_COLUMNS = ['Име', 'Name', 'Company']
 
 
@@ -111,30 +110,21 @@ def _to_clean_string(value, default=''):
 
 
 def build_partners_import_payload(df, log):
-    if not any(col in df.columns for col in PARTNERS_ID_COLUMNS):
-        log("✗ Липсва колона за идентификатор (очаква се 'PartnerID', 'ID' или 'MainPartnerID').")
-        return []
-
     if not any(col in df.columns for col in PARTNERS_NAME_COLUMNS):
         log("✗ Липсва колона за име (очаква се 'Име', 'Name' или 'Company').")
         return []
 
-    data_by_partner_id = {}
+    data = []
     skipped = 0
-    duplicates = 0
 
-    for idx, row in df.iterrows():
-        partner_id_raw = _pick_first_existing_value(row, PARTNERS_ID_COLUMNS, default=None)
-        partner_id = _to_int(partner_id_raw, default=None)
-
+    for _, row in df.iterrows():
         name = _to_clean_string(_pick_first_existing_value(row, ['Име', 'Name', 'Company'], default=''))
-        if partner_id is None or partner_id <= 0 or not name:
+        if not name:
             skipped += 1
             continue
 
         contact_name = _to_clean_string(_pick_first_existing_value(row, ['Лице за контакт', 'ContactName', 'MOL'], default=''))
         payload = {
-            'PartnerID': partner_id,
             'Name': name,
             'NameEnglish': _to_clean_string(
                 _pick_first_existing_value(row, ['Име (EN)', 'NameEnglish'], default=''),
@@ -153,28 +143,14 @@ def build_partners_import_payload(df, log):
             'BankAccount': _to_clean_string(_pick_first_existing_value(row, ['Банкова сметка', 'BankAccount'], default='')),
             'Priority': _to_int(_pick_first_existing_value(row, ['Priority'], default=0), default=0),
             'GroupID': _to_int(_pick_first_existing_value(row, ['GroupID'], default=1), default=1),
-            'Visible': _to_int(_pick_first_existing_value(row, ['Visible'], default=1), default=1),
-            'MainPartnerID': _to_int(_pick_first_existing_value(row, ['MainPartnerID'], default=partner_id), default=partner_id),
             'StatusID': _to_int(_pick_first_existing_value(row, ['StatusID'], default=1), default=1),
-            'IsExported': _to_int(_pick_first_existing_value(row, ['IsExported'], default=0), default=0),
-            'IsOSSPartner': _to_int(_pick_first_existing_value(row, ['IsOSSPartner'], default=0), default=0),
             'CountryID': _to_int(_pick_first_existing_value(row, ['CountryID'], default=0), default=0),
-            'DocumentEndDatePeriod': _to_int(
-                _pick_first_existing_value(row, ['DocumentEndDatePeriod'], default=0),
-                default=0,
-            ),
         }
-
-        if partner_id in data_by_partner_id:
-            duplicates += 1
-        data_by_partner_id[partner_id] = payload
+        data.append(payload)
 
     if skipped > 0:
         log(f'⚠ Пропуснати {skipped} невалидни реда.')
-    if duplicates > 0:
-        log(f'⚠ Открити {duplicates} дублирани PartnerID. Използван е последният срещнат ред.')
-
-    return list(data_by_partner_id.values())
+    return data
 
 
 def import_items_excel(log, config=CONFIG):
@@ -323,7 +299,7 @@ def import_partners_excel(log, config=CONFIG):
         if not with_tk_dialog(
             lambda r: messagebox.askyesno(
                 'Потвърждение',
-                f'Ще бъдат импортирани/обновени до {len(df)} партньора.\nПотвърждавате ли?',
+                f'Ще бъдат заменени записите в Partners с {len(df)} нови.\nПотвърждавате ли?',
                 parent=r,
             )
         ):
@@ -351,8 +327,19 @@ def import_partners_excel(log, config=CONFIG):
                 log("✗ Таблица 'Partners' не е намерена в избраната база.")
                 return
 
-            cursor.execute("SELECT [PartnerID] FROM [dbo].[Partners]")
-            existing_partner_ids = {int(row[0]) for row in cursor.fetchall() if row[0] is not None}
+            cursor.execute(
+                """
+                UPDATE [dbo].[Partners] SET [Visible] = 0;
+                BEGIN TRY
+                    DELETE FROM [dbo].[Partners];
+                END TRY
+                BEGIN CATCH
+                END CATCH;
+                """
+            )
+
+            cursor.execute("SELECT ISNULL(MAX([PartnerID]), 0) FROM [dbo].[Partners]")
+            max_partner_id = int(cursor.fetchone()[0] or 0)
 
             cursor.execute("SELECT COLUMNPROPERTY(OBJECT_ID('dbo.Partners'), 'PartnerID', 'IsIdentity')")
             row = cursor.fetchone()
@@ -366,23 +353,13 @@ def import_partners_excel(log, config=CONFIG):
                     PartnerID, Name, NameEnglish, ContactName, ContactNameEnglish, EMail, Bulstat,
                     VatId, BankName, BankCode, BankAccount, Priority, GroupID, Visible, MainPartnerID,
                     StatusID, IsExported, IsOSSPartner, CountryID, DocumentEndDatePeriod
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            update_sql = """
-                UPDATE [dbo].[Partners]
-                SET
-                    Name = ?, NameEnglish = ?, ContactName = ?, ContactNameEnglish = ?, EMail = ?, Bulstat = ?,
-                    VatId = ?, BankName = ?, BankCode = ?, BankAccount = ?, Priority = ?, GroupID = ?,
-                    Visible = ?, MainPartnerID = ?, StatusID = ?, IsExported = ?, IsOSSPartner = ?,
-                    CountryID = ?, DocumentEndDatePeriod = ?
-                WHERE PartnerID = ?
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 0, 0, ?, 0)
             """
 
             inserted = 0
-            updated = 0
 
             for i, partner in enumerate(data):
-                partner_id = partner['PartnerID']
+                partner_id = max_partner_id + i + 1
                 insert_values = (
                     partner_id,
                     partner['Name'],
@@ -397,54 +374,23 @@ def import_partners_excel(log, config=CONFIG):
                     partner['BankAccount'],
                     partner['Priority'],
                     partner['GroupID'],
-                    partner['Visible'],
-                    partner['MainPartnerID'],
-                    partner['StatusID'],
-                    partner['IsExported'],
-                    partner['IsOSSPartner'],
-                    partner['CountryID'],
-                    partner['DocumentEndDatePeriod'],
-                )
-                update_values = (
-                    partner['Name'],
-                    partner['NameEnglish'],
-                    partner['ContactName'],
-                    partner['ContactNameEnglish'],
-                    partner['EMail'],
-                    partner['Bulstat'],
-                    partner['VatId'],
-                    partner['BankName'],
-                    partner['BankCode'],
-                    partner['BankAccount'],
-                    partner['Priority'],
-                    partner['GroupID'],
-                    partner['Visible'],
-                    partner['MainPartnerID'],
-                    partner['StatusID'],
-                    partner['IsExported'],
-                    partner['IsOSSPartner'],
-                    partner['CountryID'],
-                    partner['DocumentEndDatePeriod'],
                     partner_id,
+                    partner['StatusID'],
+                    partner['CountryID'],
                 )
 
-                if partner_id in existing_partner_ids:
-                    cursor.execute(update_sql, update_values)
-                    updated += 1
-                else:
-                    cursor.execute(insert_sql, insert_values)
-                    existing_partner_ids.add(partner_id)
-                    inserted += 1
+                cursor.execute(insert_sql, insert_values)
+                inserted += 1
 
                 if (i + 1) % 100 == 0:
                     log(f'  ... {i + 1}/{len(data)}')
 
             conn.commit()
-            log(f'✓ Импортът приключи. Обновени: {updated}, добавени: {inserted}')
+            log(f'✓ Импортът приключи. Добавени: {inserted}')
             with_tk_dialog(
                 lambda r: messagebox.showinfo(
                     'Успех',
-                    f'Импортът приключи успешно.\nОбновени: {updated}\nДобавени: {inserted}',
+                    f'Импортът приключи успешно.\nДобавени: {inserted}',
                     parent=r,
                 )
             )
