@@ -383,10 +383,7 @@ class ExcelSQLManager:
                     self.log("⚠ Таблица 'Partners' не е намерена. Sheet 'Партньори' няма да бъде генериран.")
             
             if df_items.empty:
-                self.log("⚠ Няма данни за експортиране")
-                self._with_tk_dialog(lambda r: messagebox.showwarning("Внимание", 
-                    "Няма видими записи в таблицата!", parent=r))
-                return
+                self.log("ℹ Няма видими записи в 'Items'. Ще бъде създаден празен sheet 'Items'.")
             
             # Обработка и запис в Excel (както в предишната версия)
             df_items['Код'] = df_items['Код'].astype(str).replace(['nan', 'None', 'null'], '')
@@ -397,27 +394,32 @@ class ExcelSQLManager:
                 ws_items = writer.sheets['Items']
                 self.auto_adjust_column_width(ws_items)
                 self.format_header_bold(ws_items)
+                items_count = len(df_items)
                 
                 # Валидации и други шийтове...
                 if not df_vatrates.empty:
                     df_vatrates['Display'] = df_vatrates['ДДС ID'].astype(str) + ' - ' + df_vatrates['Описание']
                     df_vatrates[['ДДС ID', 'Display', 'Описание', 'Стойност', 'Тип']].to_excel(writer, index=False, sheet_name='VatRates')
-                    self.add_dropdown_validation(ws_items, 'E', 'VatRates', 'B', 2, len(df_items)+1)
+                    if items_count > 0:
+                        self.add_dropdown_validation(ws_items, 'E', 'VatRates', 'B', 2, items_count + 1)
                 
                 if not df_itemgroups.empty:
                     df_itemgroups['Display'] = df_itemgroups['Група ID'].astype(str) + ' - ' + df_itemgroups['Име']
                     df_itemgroups[['Група ID', 'Display', 'Име']].to_excel(writer, index=False, sheet_name='ItemGroups')
-                    self.add_dropdown_validation(ws_items, 'F', 'ItemGroups', 'B', 2, len(df_items)+1)
+                    if items_count > 0:
+                        self.add_dropdown_validation(ws_items, 'F', 'ItemGroups', 'B', 2, items_count + 1)
                 
                 if not df_status.empty:
                     df_status['Display'] = df_status['Статус ID'].astype(str) + ' - ' + df_status['Име']
                     df_status[['Статус ID', 'Display', 'Име']].to_excel(writer, index=False, sheet_name='Status')
-                    self.add_dropdown_validation(ws_items, 'G', 'Status', 'B', 2, len(df_items)+1)
+                    if items_count > 0:
+                        self.add_dropdown_validation(ws_items, 'G', 'Status', 'B', 2, items_count + 1)
                 
                 if not df_vatterms.empty:
                     df_vatterms['Display'] = df_vatterms['ДДС Срок ID'].astype(str) + ' - ' + df_vatterms['Описание']
                     df_vatterms[['ДДС Срок ID', 'Display', 'Описание', 'Тип']].to_excel(writer, index=False, sheet_name='VatTerms')
-                    self.add_dropdown_validation(ws_items, 'H', 'VatTerms', 'B', 2, len(df_items)+1)
+                    if items_count > 0:
+                        self.add_dropdown_validation(ws_items, 'H', 'VatTerms', 'B', 2, items_count + 1)
 
                 if partners_table_exists:
                     df_partners.to_excel(writer, index=False, sheet_name='Партньори')
