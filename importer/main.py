@@ -336,8 +336,19 @@ class ExcelSQLManager:
         if not self.check_file_selected():
             return
         
-        base, ext = os.path.splitext(self.selected_file)
-        export_file = f"{base}_exported{ext}"
+        initial_dir = os.path.dirname(self.selected_file) if self.selected_file else os.getcwd()
+        initial_name = os.path.splitext(os.path.basename(self.selected_file))[0] + "_exported.xlsx"
+        export_file = self._with_tk_dialog(lambda r: filedialog.asksaveasfilename(
+            title="Запази Excel файл като",
+            initialdir=initial_dir,
+            initialfile=initial_name,
+            defaultextension=".xlsx",
+            filetypes=[("Excel файлове", "*.xlsx"), ("Всички файлове", "*.*")],
+            parent=r
+        ))
+        if not export_file:
+            self.log("Експортът е отменен от потребителя.")
+            return
         
         self.log(f"=== ЕКСПОРТ ОТ SQL КЪМ EXCEL ===")
         self.log(f"Сървър: {CONFIG['server']}")
@@ -630,7 +641,7 @@ class ExcelSQLManager:
             print("Файл: [не е избран]")
         print("-"*60)
         print("1. 📂 Избор на файл")
-        print("2. 📤 Експорт SQL → Excel")
+        print("2. 📤 Експорт Microinvest Invoice Pro → Excel")
         print("3. 📥 Импорт Excel → SQL")
         print("4. 🗃️  Смяна на база данни")
         print("5. 🚪 Изход")
