@@ -290,7 +290,7 @@ class ExcelSQLManager:
             return
         
         initial_dir = os.path.dirname(CONFIG['excel_file']) if CONFIG['excel_file'] and os.path.exists(CONFIG['excel_file']) else os.getcwd()
-        initial_name = "items_exported.xlsx"
+        initial_name = "invoice_pro_items_export.xlsx"
         export_file = self._with_tk_dialog(lambda r: filedialog.asksaveasfilename(
             title="Запази Excel файл като",
             initialdir=initial_dir,
@@ -422,7 +422,7 @@ class ExcelSQLManager:
             return
 
         initial_dir = os.path.dirname(CONFIG['excel_file']) if CONFIG['excel_file'] and os.path.exists(CONFIG['excel_file']) else os.getcwd()
-        initial_name = "partners_exported.xlsx"
+        initial_name = "invoice_pro_partners_export.xlsx"
         export_file = self._with_tk_dialog(lambda r: filedialog.asksaveasfilename(
             title="Запази Excel файл като",
             initialdir=initial_dir,
@@ -528,9 +528,9 @@ class ExcelSQLManager:
         return None
 
     def export_warehouse_pro_partners_to_excel(self):
-        default_mdb_file = r"C:\ProgramData\Microinvest\Warehouse ProMicroinvestю.mdb"
+        default_mdb_file = r"C:\ProgramData\Microinvest\Warehouse Pro\Microinvest.mdb"
         mdb_file = input(
-            f"Въведете път до .MDB файл [{default_mdb_file}]: "
+            f"Въведете път до .MDB файл на Warehouse Pro[{default_mdb_file}]: "
         ).strip().strip('"')
         if not mdb_file:
             mdb_file = default_mdb_file
@@ -546,7 +546,7 @@ class ExcelSQLManager:
             return
 
         initial_dir = os.path.dirname(mdb_file) if os.path.exists(mdb_file) else os.getcwd()
-        initial_name = "warehouse_pro_partners_exported.xlsx"
+        initial_name = "warehouse_pro_partners_export.xlsx"
         export_file = self._with_tk_dialog(lambda r: filedialog.asksaveasfilename(
             title="Запази Excel файл като",
             initialdir=initial_dir,
