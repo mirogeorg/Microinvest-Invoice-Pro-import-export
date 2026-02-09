@@ -374,6 +374,9 @@ class ExcelSQLManager:
             with pd.ExcelWriter(export_file, engine='openpyxl') as writer:
                 df_items.to_excel(writer, index=False, sheet_name='Items')
                 ws_items = writer.sheets['Items']
+                for row in range(2, len(df_items) + 2):
+                    ws_items[f'A{row}'].number_format = '@'      # Код като Text
+                    ws_items[f'C{row}'].number_format = '0.00'   # Мярка с 2 десетични
                 self.auto_adjust_column_width(ws_items)
                 self.format_header_bold(ws_items)
                 items_count = len(df_items)
