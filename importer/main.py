@@ -666,7 +666,7 @@ class ExcelSQLManager:
             self.log(f"Пропуснати {skipped} невалидни реда")
         return data
     
-    def import_from_excel(self):
+    def import_items_from_excel(self):
         if not self.ensure_database_selected():
             self.log("Импортът е отменен: няма избрана база данни.")
             return
@@ -769,7 +769,7 @@ class ExcelSQLManager:
         print("1. 📤 Експорт Invoice Pro Стоки + свързани таблици → Excel")
         print("2. 📤 Експорт Invoice Pro Партньори → Excel")
         print("3. 📤 Експорт Warehouse Pro партньори -> Excel")
-        print("4. 📥 Импорт Excel → SQL")
+        print("4. 📥 Импорт Excel → Invoice Pro Items")
         print("5. 🗃️ Смяна на база данни")
         print("6. 🚪 Изход")
         print("="*60)
@@ -801,7 +801,7 @@ class ExcelSQLManager:
             elif choice == '3':
                 self.export_warehouse_pro_partners_to_excel()
             elif choice == '4':
-                self.import_from_excel()
+                self.import_items_from_excel()
             elif choice == '5':
                 self.prompt_database_selection()
             elif choice == '6':
