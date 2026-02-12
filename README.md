@@ -96,7 +96,7 @@ Use this if you work with multiple Python versions and want per-project version 
    ```
 5. Install dependencies and run:
    ```bat
-   pip install --upgrade pip
+   python.exe -m pip install --upgrade pip
    pip install -r requirements.txt
    python importer\main.py
    ```
